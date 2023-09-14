@@ -30,11 +30,24 @@ app.get("/users/:id",(req,res)=>{
 //api to update an user
 app.put("/users/:id",(req,res)=>{
     const id = req.params.id
+    const body = req.body
     const user = users.find((u)=> u.id==id)
     if(user){
-        user.fName = "zahid"
-        user.lName = "fahim"
+        user.fName = body.fName
+        user.lName = body.lName
         res.json(user)
+    }
+    else{
+        res.status(404).json({message:"user not found"})
+    }
+})
+//api to delete user
+app.delete("/users/:id",(req,res)=>{
+    const id = req.params.id
+    const userIndex = users.find((u)=> u.id==id)
+    if(userIndex){
+        users.splice(1,1)  //put the index number and how many u want to delete
+        res.json(users)
     }
     else{
         res.status(404).json({message:"user not found"})
