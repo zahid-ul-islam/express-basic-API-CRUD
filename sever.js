@@ -2,6 +2,8 @@ require("dotenv").config();
 const express = require("express");
 const app = express();
 const mongoose = require("mongoose");
+const bcrypt = require("bcrypt")
+const jwt = require('jsonwebtoken')
 const bodyParser = require("body-parser");
 app.use(bodyParser.json());
 
@@ -23,6 +25,7 @@ const userSchema = new mongoose.Schema(
     fName: String,
     lName: String,
     email: String,
+    password: String,
     age: Number,
   },
   {
@@ -32,10 +35,20 @@ const userSchema = new mongoose.Schema(
 //creating model of the schema to manipulate
 const User = mongoose.model("User", userSchema);
 
-//api to create user
+//api to create user or register
 app.post("/users", async (req, res) => {
   try {
-    const user = new User(req.body);
+    const salt = await bcrypt.genSalt(10)
+    const hash = await bcrypt.hash(req.body.password, salt)
+    const password = hash
+    const userObj = {
+      fName: req.body.fName,
+      lName: req.body.lName,
+      email: req.body.email,
+      password: password,
+      age: req.body.age
+    };
+    const user = new User(userObj);
     await user.save();
     res.status(201).json(user);
   } catch (error) {
@@ -43,6 +56,30 @@ app.post("/users", async (req, res) => {
     res.status(500).json({ message: "something went wrong" });
   }
 });
+//api to login a user
+app.post("/users/login", async (req,res)=>{
+  try {
+    const {email,password}= req.body
+    const user = await User.findOne({email:email})
+    if(!user){
+      res.status(404).json({message: "user not found"})
+    } else{
+      const isValidPass= await bcrypt.compare(password, user.password)
+      if(!isValidPass){
+        res.status(401).json({message:"Wrong password"})
+      } else{
+        const token = jwt.sign({email:user.email, id:user._id},'secret')
+        const userObj = user.toJSON()
+        userObj['accessToken']= token
+
+        res.status(200).json(userObj)
+      }
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "something went wrong" });
+  }
+})
 //api to get all the user
 app.get("/users", async (req, res) => {
   try {
@@ -101,7 +138,6 @@ app.delete("/users/:id", async (req, res) => {
     res.status(500).json({ message: "something went wrong" });
   }
 });
-
 
 // connection check
 app.get("/", (req, res) => {
