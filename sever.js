@@ -68,7 +68,7 @@ app.post("/users/login", async (req,res)=>{
       if(!isValidPass){
         res.status(401).json({message:"Wrong password"})
       } else{
-        const token = jwt.sign({email:user.email, id:user._id},'secret')
+        const token = jwt.sign({email:user.email, id:user._id},process.env.JWT_SECRET)
         const userObj = user.toJSON()
         userObj['accessToken']= token
 
@@ -80,6 +80,39 @@ app.post("/users/login", async (req,res)=>{
     res.status(500).json({ message: "something went wrong" });
   }
 })
+//middleware to authentication
+const authenticateToken = (req,res,next)=>{
+  const authHeader = req.headers.authorization
+  const token = authHeader && authHeader.split(' ')[1]
+  if(!token){
+    res.status(401).json({message:"unauthorized"})
+  } else{
+    jwt.verify(token, process.env.JWT_SECRET, (err, user)=>{
+      if(err){
+        res.status(401).json({message:"unauthorized"})
+      } else{
+        req.user =user
+        next()
+      }
+    })
+  }
+}
+//get an user profile
+app.get("/profile", authenticateToken,async (req,res)=>{
+  try {
+    const id = req.user.id;
+    const user = await User.findById(id);
+    if (user) {
+      res.json(user);
+    } else {
+      res.status(404).json({ message: "user not found" });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "something went wrong" });
+  }
+  
+})
 //api to get all the user
 app.get("/users", async (req, res) => {
   try {
@@ -90,7 +123,7 @@ app.get("/users", async (req, res) => {
     res.status(500).json({ message: "something went wrong" });
   }
 });
-//api to get a specific user via id
+//api to get a specific user via id. Just create for basic information. We make the updated get method for finding an user in the /profile request
 app.get("/users/:id", async (req, res) => {
   try {
     const id = req.params.id;
