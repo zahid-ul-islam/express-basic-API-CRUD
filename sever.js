@@ -52,8 +52,7 @@ app.post("/users", async (req, res) => {
     await user.save();
     res.status(201).json(user);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "something went wrong" });
+    catchFunction(error, res);
   }
 });
 //api to login a user
@@ -64,64 +63,13 @@ app.post("/users/login", async (req, res) => {
       res.status(401).json({ message: "type not found" });
     } else {
       if (type == "email") {
-        const user = await User.findOne({ email: email });
-        if (!user) {
-          res.status(404).json({ message: "user not found" });
-        } else {
-          const isValidPass = await bcrypt.compare(password, user.password);
-          if (!isValidPass) {
-            res.status(401).json({ message: "Wrong password" });
-          } else {
-            const accessToken = jwt.sign(
-              { email: user.email, id: user._id },
-              process.env.JWT_SECRET,
-              { expiresIn: "2d" }
-            );
-            const refreshToken = jwt.sign(
-              { id: user._id },
-              process.env.JWT_SECRET,
-              { expiresIn: "30d" }
-            );
-            const userObj = user.toJSON();
-            userObj["accessToken"] = accessToken;
-            userObj["refreshToken"] = refreshToken;
-
-            res.status(200).json(userObj);
-           }
-        }
+        await handleEmailLogin(email, res, password);
       } else {
-        jwt.verify(refreshToken, process.env.JWT_SECRET, async (err, payload) => {
-          if (err) {
-            res.status(401).json({ message: "refresh token not matched" });
-          } else {
-           const id = payload.id
-           const user = await User.findById(id)
-           if(!user){
-            res.status(401).json({ message: "unauthorized" });
-           } else{
-            const accessToken = jwt.sign(
-              { email: user.email, id: user._id },
-              process.env.JWT_SECRET,
-              { expiresIn: "2d" }
-            );
-            const refreshToken = jwt.sign(
-              { id: user._id },
-              process.env.JWT_SECRET,
-              { expiresIn: "30d" }
-            );
-            const userObj = user.toJSON();
-            userObj["accessToken"] = accessToken;
-            userObj["refreshToken"] = refreshToken;
-
-            res.status(200).json(userObj);
-           }
-          }
-        });
+        handleRefreshLogin(refreshToken, res);
       }
     }
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "something went wrong" });
+    catchFunction(error, res);
   }
 });
 //middleware to authentication
@@ -152,8 +100,7 @@ app.get("/profile", authenticateToken, async (req, res) => {
       res.status(404).json({ message: "user not found" });
     }
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "something went wrong" });
+    catchFunction(error, res);
   }
 });
 //api to get all the user
@@ -162,8 +109,7 @@ app.get("/users", async (req, res) => {
     const users = await User.find({});
     res.json(users);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "something went wrong" });
+    catchFunction(error, res);
   }
 });
 //api to get a specific user via id. Just create for basic information. We make the updated get method for finding an user in the /profile request
@@ -177,8 +123,7 @@ app.get("/users/:id", async (req, res) => {
       res.status(404).json({ message: "user not found" });
     }
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "something went wrong" });
+    catchFunction(error, res);
   }
 });
 //api to update an user
@@ -194,8 +139,7 @@ app.put("/users/:id", async (req, res) => {
       res.status(404).json({ message: "user not found" });
     }
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "something went wrong" });
+    catchFunction(error, res);
   }
 });
 //api to delete user
@@ -210,8 +154,7 @@ app.delete("/users/:id", authenticateToken, async (req, res) => {
       res.status(404).json({ message: "user not found" });
     }
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "something went wrong" });
+    catchFunction(error, res);
   }
 });
 
@@ -220,3 +163,57 @@ const port = process.env.PORT;
 app.listen(port, () => {
   console.log(`server is running on port ${port}`);
 });
+function handleRefreshLogin(refreshToken, res) {
+  if (!refreshToken) {
+    res.status(401).json({ message: "refresh token not defined" });
+  } else {
+    jwt.verify(refreshToken, process.env.JWT_SECRET, async (err, payload) => {
+      if (err) {
+        res.status(401).json({ message: "refresh token not matched" });
+      } else {
+        const id = payload.id;
+        const user = await User.findById(id);
+        if (!user) {
+          res.status(401).json({ message: "unauthorized" });
+        } else {
+          getUserTokens(user, res);
+        }
+      }
+    });
+  }
+}
+
+async function handleEmailLogin(email, res, password) {
+  const user = await User.findOne({ email: email });
+  if (!user) {
+    res.status(404).json({ message: "user not found" });
+  } else {
+    const isValidPass = await bcrypt.compare(password, user.password);
+    if (!isValidPass) {
+      res.status(401).json({ message: "Wrong password" });
+    } else {
+      getUserTokens(user, res);
+    }
+  }
+}
+
+function catchFunction(error, res) {
+  console.error(error);
+  res.status(500).json({ message: "something went wrong" });
+}
+
+function getUserTokens(user, res) {
+  const accessToken = jwt.sign(
+    { email: user.email, id: user._id },
+    process.env.JWT_SECRET,
+    { expiresIn: "2d" }
+  );
+  const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+    expiresIn: "30d",
+  });
+  const userObj = user.toJSON();
+  userObj["accessToken"] = accessToken;
+  userObj["refreshToken"] = refreshToken;
+
+  res.status(200).json(userObj);
+}
