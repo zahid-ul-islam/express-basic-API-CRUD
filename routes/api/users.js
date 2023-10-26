@@ -1,12 +1,26 @@
 const express = require("express");
+const {body, validationResult} = require('express-validator') 
 const router = express.Router();
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("../../models/User");
 const authenticateToken = require("../../middleware/auth");
 
-router.post("/", async (req, res) => {
+router.post("/",
+[
+  body('fName','fName is required').notEmpty(),
+  body('lName','lName is required').notEmpty(),
+  body('email','please enter a valid email').notEmpty().isEmail(),
+  body('age','age is required').optional().isNumeric(),
+  body('password','please enter a valid password with 4 or more characters').isLength({min: 4}),
+
+],
+ async (req, res) => {
   try {
+    const errors = validationResult(req)
+    if(!errors.isEmpty()){
+      return res.status(400).json({errors: errors})
+    }
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(req.body.password, salt);
     const password = hash;
@@ -26,18 +40,25 @@ router.post("/", async (req, res) => {
 });
 
 //api to login a user
-router.post("/login", async (req, res) => {
+router.post("/login",
+[
+  body('type','type is required').notEmpty(),
+  body('type','type must be email or refresh').isIn(['email','refresh '] )
+],
+ async (req, res) => {
   try {
+    const errors = validationResult(req)
+    if(!errors.isEmpty()){
+      return res.status(400).json({errors: errors})
     const { email, password, type, refreshToken } = req.body;
-    if (!type) {
-      res.status(401).json({ message: "type not found" });
-    } else {
+     
       if (type == "email") {
         await handleEmailLogin(email, res, password);
       } else {
         handleRefreshLogin(refreshToken, res);
-      }
+      
     }
+  }
   } catch (error) {
     catchFunction(error, res);
   }
